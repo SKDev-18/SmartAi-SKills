@@ -1,0 +1,514 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id               String            @id @default(cuid())
+  email            String            @unique
+  passwordHash     String
+  name             String
+  employeeId       String            @unique @default(cuid())
+  department       String            @default("Computer Engineering") // e.g. NSSO, CSO, or Engineering Branch
+  designation      String            @default("Engineering Student")
+  experienceLevel  String            @default("Beginner")
+  role             String            @default("LEARNER") // LEARNER or ADMIN
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  // Engineering Student Profile Fields (PRD §4, §6, §7, §8, §12)
+  dob              String?
+  mobile           String?
+  gender           String?
+  branch           String?           // Computer Engineering, IT, Mechanical, Civil, etc.
+  year             String?           // 1st Year, 2nd Year, 3rd Year, 4th Year
+  semester         String?           // Semester 1, 2, ...
+  college          String?           // College/University name
+  graduationYear   String?           // e.g. 2027
+  skills           String?           // JSON string: [{ name: "C++", level: "Beginner" }]
+  referralSource   String?           // YouTube, Instagram, LinkedIn, etc.
+  onboardingCompleted Boolean        @default(false)
+  currentCourseId  String?           @default("course_dsa")
+  targetSkill      String?           @default("Data Structures & Algorithms")
+  learningGoals    String?           // JSON string: ["Data Analytics", "Python", "SQL"]
+  primaryLearningGoal String?        // e.g. "Data Analytics"
+
+  // Relationships
+  competencies     UserCompetency[]
+  assessmentAttempts AssessmentAttempt[]
+  quizAttempts     QuizAttempt[]
+  learningProgress LearningProgress[]
+  recommendations  Recommendation[]
+  uploadedMaterials LearningMaterial[] @relation("AdminUploadedMaterials")
+  aiJobs           AIGenerationJob[]
+  topicProgress    UserTopicProgress[]
+  videoProgress    VideoProgress[]
+
+  @@index([email])
+  @@index([employeeId])
+  @@index([department])
+}
+
+model Competency {
+  id               String            @id @default(cuid())
+  domain           String            // e.g. Statistical Methods, Survey Methodology, Data Management, Data Analysis, Data Visualization, Official Statistics
+  name             String            // e.g. Sampling, Regression, Data Cleaning
+  code             String            @unique // e.g. STAT_METH_REG, SURV_METH_SAMP
+  description      String
+  targetLevel      Float             @default(75.0) // default 75%
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  topics           CompetencyTopic[]
+  userCompetencies UserCompetency[]
+  assessmentQuestions AssessmentQuestion[]
+  quizQuestions    QuizQuestion[]
+  learningMaterials LearningMaterial[]
+  learningResources LearningResource[]
+
+  @@index([domain])
+  @@index([code])
+}
+
+model CompetencyTopic {
+  id               String            @id @default(cuid())
+  competencyId     String
+  name             String            // e.g. Stratified Sampling, Multi-Stage Sampling, Cluster Sampling
+  description      String?
+  createdAt        DateTime          @default(now())
+
+  competency       Competency        @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  assessmentQuestions AssessmentQuestion[]
+
+  @@index([competencyId])
+}
+
+model UserCompetency {
+  id               String            @id @default(cuid())
+  userId           String
+  competencyId     String
+  currentScore     Float             @default(50.0) // percentage 0-100
+  requiredLevel    Float             @default(75.0) // percentage 0-100
+  gap              Float             @default(25.0) // requiredLevel - currentScore (>=0)
+  status           String            @default("DEVELOPING") // STRONG, DEVELOPING, NEEDS_IMPROVEMENT, CRITICAL_GAP
+  lastEvaluatedAt  DateTime          @default(now())
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  competency       Competency        @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, competencyId])
+  @@index([userId])
+  @@index([competencyId])
+  @@index([status])
+}
+
+model Assessment {
+  id               String            @id @default(cuid())
+  title            String
+  description      String
+  estimatedMinutes Int               @default(20)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+
+  questions        AssessmentQuestion[]
+  attempts         AssessmentAttempt[]
+}
+
+model AssessmentQuestion {
+  id               String            @id @default(cuid())
+  assessmentId     String
+  competencyId     String
+  topicId          String?
+  questionText     String
+  optionA          String
+  optionB          String
+  optionC          String
+  optionD          String
+  correctAnswer    String            // A, B, C, or D
+  explanation      String
+  difficulty       String            @default("MEDIUM") // EASY, MEDIUM, HARD
+  createdAt        DateTime          @default(now())
+
+  assessment       Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  competency       Competency        @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  topic            CompetencyTopic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  answers          AssessmentAnswer[]
+
+  @@index([assessmentId])
+  @@index([competencyId])
+}
+
+model AssessmentAttempt {
+  id               String            @id @default(cuid())
+  userId           String
+  assessmentId     String
+  score            Float             // points achieved
+  maxScore         Float             // total questions
+  percentage       Float
+  completedAt      DateTime          @default(now())
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assessment       Assessment        @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  answers          AssessmentAnswer[]
+
+  @@index([userId])
+  @@index([assessmentId])
+}
+
+model AssessmentAnswer {
+  id               String            @id @default(cuid())
+  attemptId        String
+  questionId       String
+  selectedOption   String            // A, B, C, or D
+  isCorrect        Boolean
+
+  attempt          AssessmentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question         AssessmentQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+model LearningMaterial {
+  id               String            @id @default(cuid())
+  title            String
+  description      String
+  fileName         String
+  fileType         String            // PDF, DOCX, PPTX, TXT
+  fileSize         Int               // in bytes
+  contentSnippet   String            // text extracted from file
+  extractedTopics  String?           // JSON array of detected topics
+  keyConcepts      String?           // JSON array of key concepts
+  summary          String?
+  competencyId     String?
+  topic            String?
+  difficulty       String            @default("MEDIUM")
+  uploadedById     String
+  createdAt        DateTime          @default(now())
+
+  uploadedBy       User              @relation("AdminUploadedMaterials", fields: [uploadedById], references: [id], onDelete: Cascade)
+  competency       Competency?       @relation(fields: [competencyId], references: [id], onDelete: SetNull)
+  quizzes          Quiz[]
+  quizQuestions    QuizQuestion[]
+  learningResources LearningResource[]
+
+  @@index([uploadedById])
+  @@index([competencyId])
+}
+
+model LearningResource {
+  id               String            @id @default(cuid())
+  title            String
+  description      String
+  topic            String
+  competencyId     String
+  difficulty       String            @default("INTERMEDIATE") // BEGINNER, INTERMEDIATE, ADVANCED
+  durationMinutes  Int               @default(60)
+  source           String            @default("INTERNAL") // IGOT, INTERNAL, MATERIAL
+  externalUrl      String?
+  materialId       String?
+  createdAt        DateTime          @default(now())
+
+  competency       Competency        @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  material         LearningMaterial? @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  progress         LearningProgress[]
+  recommendations  Recommendation[]
+
+  @@index([competencyId])
+  @@index([source])
+}
+
+model LearningProgress {
+  id               String            @id @default(cuid())
+  userId           String
+  resourceId       String
+  progressPercentage Float           @default(0.0)
+  status           String            @default("NOT_STARTED") // NOT_STARTED, IN_PROGRESS, COMPLETED
+  currentStep      String?           // next subtopic / module
+  updatedAt        DateTime          @updatedAt
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resource         LearningResource  @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, resourceId])
+  @@index([userId])
+  @@index([status])
+}
+
+model Quiz {
+  id               String            @id @default(cuid())
+  title            String
+  description      String
+  materialId       String?
+  competencyId     String?
+  topicId          String?
+  topic            String
+  passPercentage   Float             @default(80.0) // 80% default completion threshold (PRD §28, §30)
+  masteryThreshold Float             @default(90.0) // >90% mastery threshold (PRD §29, §30)
+  relearnThreshold Float             @default(60.0) // <60% relearn threshold (PRD §26, §30)
+  isPublished      Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+
+  material         LearningMaterial? @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  topicRel         Topic?            @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  questions        QuizQuestion[]
+  attempts         QuizAttempt[]
+
+  @@index([competencyId])
+  @@index([topicId])
+  @@index([isPublished])
+}
+
+model QuizQuestion {
+  id               String            @id @default(cuid())
+  quizId           String?
+  materialId       String?
+  competencyId     String
+  topic            String
+  questionText     String
+  optionA          String
+  optionB          String
+  optionC          String
+  optionD          String
+  correctAnswer    String            // A, B, C, D
+  explanation      String
+  difficulty       String            @default("MEDIUM")
+  sourceReference  String            // e.g. "Survey Methodology Handbook, Page 14"
+  status           String            @default("DRAFT") // DRAFT, APPROVED, REJECTED
+  qualityScore     Float             @default(100.0)
+  validationNotes  String?           // JSON array of validation checks
+  createdAt        DateTime          @default(now())
+
+  quiz             Quiz?             @relation(fields: [quizId], references: [id], onDelete: SetNull)
+  material         LearningMaterial? @relation(fields: [materialId], references: [id], onDelete: SetNull)
+  competency       Competency        @relation(fields: [competencyId], references: [id], onDelete: Cascade)
+  answers          QuizAnswer[]
+
+  @@index([quizId])
+  @@index([materialId])
+  @@index([competencyId])
+  @@index([status])
+}
+
+model QuizAttempt {
+  id               String            @id @default(cuid())
+  userId           String
+  quizId           String
+  score            Float
+  maxScore         Float
+  percentage       Float
+  performanceAnalysis String?        // JSON breakdown: weakConcepts, strongConcepts, recommendation
+  completedAt      DateTime          @default(now())
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz             Quiz              @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers          QuizAnswer[]
+
+  @@index([userId])
+  @@index([quizId])
+}
+
+model QuizAnswer {
+  id               String            @id @default(cuid())
+  attemptId        String
+  questionId       String
+  selectedOption   String
+  isCorrect        Boolean
+
+  attempt          QuizAttempt       @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question         QuizQuestion      @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([attemptId])
+}
+
+model Recommendation {
+  id               String            @id @default(cuid())
+  userId           String
+  resourceId       String
+  priorityScore    Float             @default(1.0)
+  reasonExplanation String          // Explains WHY recommended (PRD §11 & §48)
+  isDismissed      Boolean           @default(false)
+  createdAt        DateTime          @default(now())
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resource         LearningResource  @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isDismissed])
+}
+
+model IGOTCourse {
+  id               String            @id @default(cuid())
+  courseCode       String            @unique
+  title            String
+  description      String
+  domain           String
+  competencyMapped String
+  durationMinutes  Int
+  difficulty       String
+  provider         String            @default("iGOT Karmayogi / MoSPI")
+  externalUrl      String
+  thumbnailUrl     String?
+  enrollmentCount  Int               @default(140)
+  rating           Float             @default(4.8)
+  createdAt        DateTime          @default(now())
+}
+
+model IGOTIntegration {
+  id               String            @id @default(cuid())
+  providerName     String            @default("iGOT Karmayogi")
+  endpointUrl      String            @default("https://karmayogi.gov.in/api/v1/courses")
+  clientId         String            @default("MOSPI_CAPACITY_NODE_01")
+  isActive         Boolean           @default(true)
+  isMockMode       Boolean           @default(true)
+  lastSyncAt       DateTime          @default(now())
+  syncStatus       String            @default("HEALTHY")
+}
+
+model AIGenerationJob {
+  id               String            @id @default(cuid())
+  userId           String
+  jobType          String            // DOCUMENT_ANALYSIS, MCQ_GENERATION, QUIZ_ANALYSIS
+  status           String            @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  progressPercent  Int               @default(0)
+  statusMessage    String            @default("Queued")
+  inputMetadata    String?           // JSON
+  resultMetadata   String?           // JSON
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs             AIGenerationLog[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model AIGenerationLog {
+  id               String            @id @default(cuid())
+  jobId            String
+  stepName         String            // e.g. TEXT_EXTRACTION, TOPIC_MAPPING, MCQ_GENERATION, QUALITY_VALIDATION
+  message          String
+  status           String            @default("SUCCESS") // SUCCESS, WARN, ERROR
+  timestamp        DateTime          @default(now())
+
+  job              AIGenerationJob   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+model Course {
+  id              String          @id @default(cuid())
+  title           String          // e.g. "Data Structures & Algorithms"
+  slug            String          @unique // e.g. "dsa"
+  description     String
+  category        String          @default("Core Computer Science") // Programming, Data, Core Computer Science, Development, Modern Technology
+  branch          String          // "Computer Engineering", "Information Technology", etc.
+  targetAudience  String          @default("Engineering Students")
+  icon            String?
+  createdAt       DateTime        @default(now())
+
+  modules         CourseModule[]
+}
+
+model CourseModule {
+  id              String          @id @default(cuid())
+  courseId        String
+  title           String          // e.g. "Linear Data Structures"
+  order           Int             @default(0)
+
+  course          Course          @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topics          Topic[]
+
+  @@index([courseId])
+}
+
+model Topic {
+  id              String          @id @default(cuid())
+  moduleId        String
+  title           String          // e.g. "Linked List"
+  slug            String          @unique // e.g. "linked-list"
+  order           Int             @default(0)
+  description     String          // Why this topic matters
+  prerequisiteId  String?
+  notesContent    String?         // Markdown formatted comprehensive notes
+  estimatedTime   String          @default("45 mins")
+  createdAt       DateTime        @default(now())
+
+  module          CourseModule    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  prerequisite    Topic?          @relation("TopicPrerequisites", fields: [prerequisiteId], references: [id], onDelete: SetNull)
+  dependents      Topic[]         @relation("TopicPrerequisites")
+  videos          TopicVideo[]
+  quizzes         Quiz[]
+  topicProgress   UserTopicProgress[]
+
+  @@index([moduleId])
+}
+
+model TopicVideo {
+  id              String          @id @default(cuid())
+  topicId         String
+  title           String
+  youtubeUrl      String          // URL or embed ID
+  duration        String          // e.g. "18 min"
+  channel         String          // e.g. "Abdul Bari / Striver"
+  description     String?
+  learningObjective String?       // Why watch this (PRD §21)
+  order           Int             @default(0)
+
+  topic           Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  videoProgress   VideoProgress[]
+
+  @@index([topicId])
+}
+
+model VideoProgress {
+  id              String          @id @default(cuid())
+  userId          String
+  videoId         String
+  topicId         String
+  watchStatus     String          @default("WATCHED") // STARTED, WATCHED
+  startedAt       DateTime        @default(now())
+  completedAt     DateTime?
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  video           TopicVideo      @relation(fields: [videoId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, videoId])
+  @@index([userId])
+  @@index([videoId])
+}
+
+model UserTopicProgress {
+  id              String          @id @default(cuid())
+  userId          String
+  topicId         String
+  status          String          @default("LOCKED") // LOCKED, AVAILABLE, IN_PROGRESS, QUIZ_PENDING, COMPLETED, MASTERED
+  notesCompleted  Boolean         @default(false)
+  videoCompleted  Boolean         @default(false)
+  quizCompleted   Boolean         @default(false)
+  bestQuizScore   Float           @default(0.0) // 0-100%
+  attemptsCount   Int             @default(0)
+  updatedAt       DateTime        @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic           Topic           @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, topicId])
+  @@index([userId])
+  @@index([topicId])
+  @@index([status])
+}
+
+model ProgressionThreshold {
+  id                String        @id @default(cuid())
+  name              String        @default("Default Engineering Progression")
+  relearnThreshold  Float         @default(60.0) // <60% relearn
+  retryThreshold    Float         @default(80.0) // 60-79% retry
+  masteryThreshold  Float         @default(90.0) // >90% mastery
+  updatedAt         DateTime      @updatedAt
+}
+
