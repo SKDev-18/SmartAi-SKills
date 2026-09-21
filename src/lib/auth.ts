@@ -9,8 +9,13 @@ export async function hashPassword(plainText: string): Promise<string> {
   return bcrypt.hash(plainText, 10);
 }
 
-export async function verifyPassword(plainText: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(plainText, hash);
+export async function verifyPassword(plainText: string, hash?: string | null): Promise<boolean> {
+  if (!plainText || !hash) return false;
+  try {
+    return await bcrypt.compare(plainText, hash);
+  } catch {
+    return false;
+  }
 }
 
 export function createSessionToken(user: SessionUser): string {

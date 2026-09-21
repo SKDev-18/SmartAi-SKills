@@ -135,8 +135,8 @@ export default function LoginPage() {
           return;
         }
 
-        // If local database also rejected, format Firebase error
-        setError(formatFirebaseError(firebaseErr));
+        // If local database also rejected, format clear error
+        setError(fallbackData?.error || formatFirebaseError(firebaseErr));
         setLoading(false);
         return;
       }

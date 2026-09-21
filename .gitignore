@@ -38,9 +38,9 @@ yarn-error.log*
 # vercel
 .vercel
 
-# SQLite / Database local files
-prisma/*.db
+# SQLite / Database local files (dev.db is included as pre-seeded demo database)
 prisma/*.db-journal
+prisma/*.db.bak
 *.sqlite
 *.sqlite3
 
